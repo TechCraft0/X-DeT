@@ -1,0 +1,13 @@
+# The data root is supplied at runtime so this project config does not hard-code
+# a machine-specific path or modify the source dataset's dataset.yaml.
+name: yolo_final_20k
+class_names:
+  - person
+  - car
+splits:
+  train:
+    images: images/train
+    labels: labels/train
+  val:
+    images: images/val
+    labels: labels/val

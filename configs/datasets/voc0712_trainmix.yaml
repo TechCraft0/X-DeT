@@ -1,0 +1,34 @@
+# New train split: VOC2007 train + VOC2012 trainval.
+# Validation and final evaluation remain the held-out VOC2007 val/test splits.
+name: PASCAL_VOC_2007_TRAIN_PLUS_VOC_2012_TRAINVAL
+class_names:
+  - aeroplane
+  - bicycle
+  - bird
+  - boat
+  - bottle
+  - bus
+  - car
+  - cat
+  - chair
+  - cow
+  - diningtable
+  - dog
+  - horse
+  - motorbike
+  - person
+  - pottedplant
+  - sheep
+  - sofa
+  - train
+  - tvmonitor
+splits:
+  train:
+    images: images/train
+    labels: labels/train
+  val:
+    images: images/val
+    labels: labels/val
+  test:
+    images: images/test
+    labels: labels/test

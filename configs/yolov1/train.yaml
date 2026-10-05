@@ -1,0 +1,47 @@
+# YOLOv1 paper-shaped training recipe adapted to the local two-class dataset.
+source:
+  paper: "Redmon et al., You Only Look Once: Unified, Real-Time Object Detection (CVPR 2016)"
+  paper_url: https://arxiv.org/abs/1506.02640
+  reference_code: https://github.com/pjreddie/darknet/blob/master/cfg/yolov1.cfg
+  reference_code_note: "Darknet cfg is a later engineering variant and is not copied as the paper architecture."
+  reference_implementations:
+    - https://github.com/yakhyo/yolov1-pytorch
+    - https://github.com/tanjeffreyz/yolo-v1
+  adaptations:
+    - "Two classes from the local dataset; no ImageNet initialization is automatically downloaded."
+    - "For multiple annotations in one 7x7 cell, train on the largest-area object and record ignored labels."
+dataset_config: configs/datasets/yolo_final_20k.yaml
+input_size: 448
+grid_size: 7
+boxes_per_cell: 2
+epochs: 135
+micro_batch_size: 4
+effective_batch_size: 64
+num_workers: 4
+seed: 42
+optimizer:
+  name: SGD
+  learning_rate: 0.01
+  warmup_initial_learning_rate: 0.001
+  warmup_epochs: 1
+  momentum: 0.9
+  weight_decay: 0.0005
+  decay_epochs: [75, 105]
+  decay_factor: 0.1
+loss:
+  lambda_coord: 5.0
+  lambda_noobj: 0.5
+training_augmentation:
+  scale_range: [0.8, 1.2]
+  translate: 0.2
+  saturation: 1.5
+  exposure: 1.5
+  hue: 0.1
+evaluation:
+  interval_epochs: 5
+  confidence_threshold: 0.001
+  nms_iou_threshold: 0.45
+  max_detections: 100
+initialization:
+  checkpoint: null # Paper pretraining used ImageNet weights; none are downloaded automatically.
+  description: "Random initialization for this project run; differs from the paper's ImageNet pretraining."

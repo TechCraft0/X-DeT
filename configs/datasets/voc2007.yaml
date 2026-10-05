@@ -1,0 +1,33 @@
+# Converted PASCAL VOC 2007; root points to the generated YOLO-format copy.
+name: PASCAL_VOC_2007
+class_names:
+  - aeroplane
+  - bicycle
+  - bird
+  - boat
+  - bottle
+  - bus
+  - car
+  - cat
+  - chair
+  - cow
+  - diningtable
+  - dog
+  - horse
+  - motorbike
+  - person
+  - pottedplant
+  - sheep
+  - sofa
+  - train
+  - tvmonitor
+splits:
+  train:
+    images: images/train
+    labels: labels/train
+  val:
+    images: images/val
+    labels: labels/val
+  test:
+    images: images/test
+    labels: labels/test

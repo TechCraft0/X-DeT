@@ -1,0 +1,52 @@
+# YOLOv2 / YOLO9000 detector recipe adapted from the official VOC Darknet cfg.
+# This project trains from random initialization unless the user supplies a
+# project checkpoint; no weights or dataset are downloaded automatically.
+source:
+  paper: "Redmon and Farhadi, YOLO9000: Better, Faster, Stronger (CVPR 2017)"
+  paper_url: https://arxiv.org/abs/1612.08242
+  reference_code: https://github.com/pjreddie/darknet/blob/master/cfg/yolov2-voc.cfg
+  reference_implementations:
+    - https://github.com/longcw/yolo2-pytorch
+    - https://github.com/miladlink/YoloV2
+  reading_notes: https://docsaid.org/en/papers/object-detection/yolov2/
+  adaptations:
+    - "Darknet-19-shaped PyTorch model; official ImageNet-pretrained Darknet-19 weights are not loaded."
+    - "Uses the five VOC anchor priors from Darknet cfg; this recipe does not run k-means clustering."
+    - "Fixed 416x416 input and epoch-based schedule replace Darknet's iteration-based multi-scale training schedule."
+    - "YOLO9000 WordTree and joint detection/classification training are not implemented."
+dataset_config: configs/datasets/voc0712_trainmix.yaml
+input_size: 416
+grid_size: 13
+boxes_per_cell: 5
+epochs: 165
+micro_batch_size: 4
+effective_batch_size: 64
+num_workers: 4
+seed: 42
+checkpoint_interval_epochs: 10
+optimizer:
+  name: SGD
+  learning_rate: 0.001
+  warmup_initial_learning_rate: 0.0001
+  warmup_epochs: 1
+  momentum: 0.9
+  weight_decay: 0.0005
+  decay_epochs: [146, 164]
+  decay_factor: 0.1
+training_augmentation:
+  scale_range: [0.8, 1.2]
+  translate: 0.2
+  saturation: 1.5
+  exposure: 1.5
+  hue: 0.1
+loss:
+  coord_scale: 1.0
+  object_scale: 5.0
+  noobject_scale: 1.0
+  class_scale: 1.0
+  ignore_iou_threshold: 0.6
+evaluation:
+  interval_epochs: 5
+  confidence_threshold: 0.001
+  nms_iou_threshold: 0.45
+  max_detections: 100

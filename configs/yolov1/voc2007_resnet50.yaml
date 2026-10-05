@@ -1,0 +1,48 @@
+# VOC smoke/learning run based on the ResNet-50 transfer variant from the
+# tanjeffreyz reference. This is not the canonical Darknet YOLOv1 recipe.
+source:
+  paper: "Redmon et al., You Only Look Once: Unified, Real-Time Object Detection (CVPR 2016)"
+  paper_url: https://arxiv.org/abs/1506.02640
+  reference_implementations:
+    - https://github.com/tanjeffreyz/yolo-v1
+    - https://github.com/yakhyo/yolov1-pytorch
+  adaptations:
+    - "ResNet-50 ImageNet backbone is frozen; this is an engineering transfer-learning variant, not the paper's Darknet architecture."
+    - "VOC difficult objects are omitted by the YOLO TXT converter and counted in conversion_report.json."
+    - "The local backbone checkpoint is passed explicitly; no weight download occurs during training."
+dataset_config: configs/datasets/voc2007.yaml
+model:
+  architecture: yolov1_resnet50_transfer
+  backbone_checkpoint: null # Pass the local torchvision checkpoint with --backbone-checkpoint.
+  freeze_backbone: true
+input_size: 448
+grid_size: 7
+boxes_per_cell: 2
+epochs: 30
+micro_batch_size: 4
+effective_batch_size: 64
+num_workers: 4
+seed: 42
+optimizer:
+  name: SGD
+  learning_rate: 0.0001
+  warmup_initial_learning_rate: 0.00001
+  warmup_epochs: 1
+  momentum: 0.9
+  weight_decay: 0.0005
+  decay_epochs: [20, 28]
+  decay_factor: 0.1
+loss:
+  lambda_coord: 5.0
+  lambda_noobj: 0.5
+training_augmentation:
+  scale_range: [0.8, 1.2]
+  translate: 0.2
+  saturation: 1.5
+  exposure: 1.5
+  hue: 0.1
+evaluation:
+  interval_epochs: 5
+  confidence_threshold: 0.001
+  nms_iou_threshold: 0.45
+  max_detections: 100

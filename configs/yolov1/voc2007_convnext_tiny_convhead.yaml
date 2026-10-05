@@ -1,0 +1,52 @@
+# Controlled backbone comparison against voc2007_resnet50_convhead.yaml.
+# Head, data, freeze schedule, loss, optimizer and augmentation stay the same.
+# The ImageNet-pretrained backbone changes to TorchVision ConvNeXt Tiny.
+# This is an engineering variant, not paper YOLOv1.
+source:
+  paper: "Redmon et al., You Only Look Once: Unified, Real-Time Object Detection (CVPR 2016)"
+  paper_url: https://arxiv.org/abs/1506.02640
+  backbone_source: "TorchVision ConvNeXt Tiny IMAGENET1K_V1"
+  adaptations:
+    - "Use TorchVision's named ConvNeXt Tiny ImageNet weights; the recipe explicitly permits its cache download."
+    - "Keep the compact spatially shared Conv2d/GroupNorm detection head."
+    - "Keep the YOLOv1 7x7 target, loss and decoder unchanged."
+dataset_config: configs/datasets/voc2007.yaml
+model:
+  architecture: yolov1_torchvision_convhead
+  backbone_name: convnext_tiny
+  backbone_checkpoint: null
+  backbone_weights: IMAGENET1K_V1
+  freeze_backbone: true
+freeze_backbone_epochs: 5
+input_size: 448
+grid_size: 7
+boxes_per_cell: 2
+epochs: 135
+checkpoint_interval_epochs: 10
+micro_batch_size: 4
+effective_batch_size: 64
+num_workers: 4
+seed: 42
+optimizer:
+  name: Adam
+  learning_rate: 0.0001
+  backbone_lr_multiplier: 0.1
+  betas: [0.9, 0.999]
+  weight_decay: 0.0
+  warmup_epochs: 0
+  decay_epochs: [75, 105]
+  decay_factor: 0.1
+loss:
+  lambda_coord: 5.0
+  lambda_noobj: 0.5
+training_augmentation:
+  scale_range: [0.8, 1.2]
+  translate: 0.2
+  saturation: 1.5
+  exposure: 1.5
+  hue: 0.1
+evaluation:
+  interval_epochs: 10
+  confidence_threshold: 0.001
+  nms_iou_threshold: 0.45
+  max_detections: 100

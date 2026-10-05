@@ -1,0 +1,5 @@
+numpy>=1.24
+Pillow>=10
+PyYAML>=6
+matplotlib>=3.5
+# Install PyTorch separately to match the machine's CUDA/runtime requirements.

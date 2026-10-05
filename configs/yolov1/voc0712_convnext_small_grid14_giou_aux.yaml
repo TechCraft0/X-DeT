@@ -1,0 +1,54 @@
+# Single-variable experiment: add a GIoU localization term to the coord10 recipe.
+# All data, model, optimizer, augmentation, precision and schedule settings match
+# voc0712_convnext_small_grid14_coord10.yaml.
+source:
+  paper: "Redmon et al., You Only Look Once: Unified, Real-Time Object Detection (CVPR 2016)"
+  paper_url: https://arxiv.org/abs/1506.02640
+  backbone_source: "TorchVision ConvNeXt Small IMAGENET1K_V1"
+  adaptations:
+    - "Use VOC2007 train plus VOC2012 trainval; retain VOC2007 val/test splits."
+    - "Keep the YOLOv1-style ConvNeXt Small 14x14 engineering-variant architecture."
+    - "Keep lambda_coord=10 and add lambda_giou=1.0 to directly reward box overlap."
+dataset_config: configs/datasets/voc0712_trainmix.yaml
+model:
+  architecture: yolov1_torchvision_convhead
+  backbone_name: convnext_small
+  backbone_checkpoint: null
+  backbone_weights: IMAGENET1K_V1
+  freeze_backbone: true
+  grid_size: 14
+freeze_backbone_epochs: 1
+input_size: 448
+grid_size: 14
+boxes_per_cell: 2
+epochs: 24
+checkpoint_interval_epochs: 10
+micro_batch_size: 4
+effective_batch_size: 64
+num_workers: 4
+seed: 42
+optimizer:
+  name: Adam
+  learning_rate: 0.0001
+  backbone_lr_multiplier: 0.1
+  betas: [0.9, 0.999]
+  weight_decay: 0.0
+  warmup_epochs: 0
+  decay_epochs: [13, 19]
+  decay_factor: 0.1
+loss:
+  lambda_coord: 10.0
+  lambda_noobj: 0.5
+  lambda_giou: 1.0
+training_augmentation:
+  scale_range: [0.8, 1.2]
+  translate: 0.2
+  saturation: 1.5
+  exposure: 1.5
+  hue: 0.1
+evaluation:
+  interval_epochs: 2
+  confidence_threshold: 0.001
+  nms_iou_threshold: 0.45
+  max_detections: 100
+precision: bf16
