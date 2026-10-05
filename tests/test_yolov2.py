@@ -1,5 +1,8 @@
+from pathlib import Path
+
 import pytest
 import torch
+import yaml
 
 from x_yolo.models.factory import build_model
 from x_yolo.models.yolov2.loss import YoloV2Loss, build_targets
@@ -12,6 +15,13 @@ def test_yolov2_factory_and_forward_shape() -> None:
     with torch.inference_mode():
         predictions = model(torch.zeros((1, 3, 64, 64)))
     assert predictions.shape == (1, 2, 2, 5, 8)
+
+
+def test_yolov2_default_recipe_selects_yolov2_model() -> None:
+    recipe_path = Path(__file__).resolve().parents[1] / "configs/yolov2/voc0712.yaml"
+    recipe = yaml.safe_load(recipe_path.read_text(encoding="utf-8"))
+    model = build_model(recipe.get("model"), num_classes=20)
+    assert isinstance(model, YoloV2)
 
 
 def test_yolov2_requires_stride_aligned_input() -> None:

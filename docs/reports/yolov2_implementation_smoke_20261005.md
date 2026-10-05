@@ -34,3 +34,16 @@ Smoke 训练分项 loss：coordinate 0.444、object confidence 0.371、no-object
 实现和端到端工具路径可运行，当前证据只支持“结构、训练、保存、评估、曲线、分析和可视化链路通过 smoke 检查”。本次没有执行 165 epoch 的 VOC 完整训练；模型随机初始化，没有官方 Darknet-19 ImageNet 权重。因此当前没有可用精度结论或最终模型 checkpoint。
 
 下一步若要判断检测效果，需要用完整 train/val 划分运行配置训练，检查损失和 mAP 曲线，并查看验证集逐图结果。要靠近论文训练流程，还需实现并验证 Darknet-19 预训练权重加载和多尺度训练；两者尚未实现。
+
+## 默认配方复测与修复（2026-10-05）
+
+之后按默认命令复测时发现，`configs/yolov2/voc0712.yaml` 没有声明 `model.architecture`。模型工厂因此回退到 YOLOv1，训练器又把 YOLOv2 的损失参数传给 `YoloV1Loss`，报错 `unexpected keyword argument 'coord_scale'`。补充 `model: {architecture: yolov2}`，并在 `tests/test_yolov2.py` 加入默认配方模型选择回归检查。
+
+修复后结果：
+
+- YOLOv2 专项单测：7 项通过；完整测试套件：17 项通过。
+- 用默认 recipe、416×416 输入和本机 RTX 4060 Ti 对 4 张 VOC train 图片执行 1 个优化 step，并在 1 张 val 图片上完成 epoch 末评估；成功保存 `best.pt`、`last.pt` 和指标记录。
+- 独立评估与单图推理均能加载该 checkpoint；训练曲线、数据集分析图和真值/预测可视化都成功生成。
+- 单图 smoke 的 `mAP50=0`、`mAP50_95=0`，对 1 张图的结果没有精度统计意义。图像和曲线只验证生成路径，不代表训练收敛或检测可用。
+
+以上复测只验证默认 YOLOv2 代码路径。没有运行 165 epoch 的完整 VOC 训练，也没有生成可用精度结论。
