@@ -1,4 +1,6 @@
 # YOLOv2 / YOLO9000 detector recipe adapted from the official VOC Darknet cfg.
+# Continuation from epoch 165; the only training hyperparameter change is total epochs=195.
+# Existing LR milestones (146, 164) keep epochs 166-195 at 1e-5.
 # Supply --pretrained-darknet explicitly to initialize the Darknet-19 trunk
 # from the official ImageNet classifier; no weights or dataset auto-download.
 source:
@@ -14,13 +16,14 @@ source:
     - "Uses the five VOC anchor priors from Darknet cfg; this recipe does not run k-means clustering."
     - "Fixed 416x416 input and epoch-based schedule replace Darknet's iteration-based multi-scale training schedule."
     - "YOLO9000 WordTree and joint detection/classification training are not implemented."
+    - "Continuation experiment: resume epoch 165 and extend the existing 1e-5 learning-rate phase through epoch 195."
 model:
   architecture: yolov2
 dataset_config: configs/datasets/voc0712_trainmix.yaml
 input_size: 416
 grid_size: 13
 boxes_per_cell: 5
-epochs: 165
+epochs: 195
 micro_batch_size: 4
 effective_batch_size: 64
 num_workers: 4

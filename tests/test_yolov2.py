@@ -1,4 +1,5 @@
 from pathlib import Path
+import struct
 
 import pytest
 import torch
@@ -28,6 +29,14 @@ def test_yolov2_requires_stride_aligned_input() -> None:
     model = YoloV2(num_classes=2)
     with pytest.raises(ValueError, match="divisible by 32"):
         model(torch.zeros((1, 3, 65, 64)))
+
+
+def test_darknet_weight_loader_rejects_truncated_weight_data(tmp_path: Path) -> None:
+    weight_path = tmp_path / "truncated.weights"
+    # Darknet v2 header: three int32 values followed by a uint64 seen count.
+    weight_path.write_bytes(struct.pack("<3iQ", 0, 2, 0, 0) + b"\0\0\0\0")
+    with pytest.raises(ValueError, match="Expected Darknet-19 448 weights"):
+        YoloV2(num_classes=20).load_darknet19_weights(weight_path)
 
 
 def test_anchor_assignment_and_same_cell_collision_are_explicit() -> None:

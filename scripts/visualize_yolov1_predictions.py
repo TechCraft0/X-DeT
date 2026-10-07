@@ -135,6 +135,14 @@ def visualize_predictions(
         from x_yolo.models.yolov2.postprocess import decode_predictions as decode_yolov2
 
         decoder = partial(decode_yolov2, anchors=model.anchors)
+    elif architecture == "yolov3":
+        from x_yolo.models.yolov3.postprocess import decode_predictions as decode_yolov3
+
+        decoder = partial(
+            decode_yolov3,
+            anchors=model.anchors,
+            anchor_masks=model.anchor_masks,
+        )
     else:
         decoder = decode_yolov1
     model.eval()

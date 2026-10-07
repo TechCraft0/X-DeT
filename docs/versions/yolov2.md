@@ -7,7 +7,7 @@
 - 代码交叉参考：[longcw/yolo2-pytorch](https://github.com/longcw/yolo2-pytorch)、[miladlink/YoloV2](https://github.com/miladlink/YoloV2)。前者 README 提醒其依赖较旧 PyTorch；两者用于理解模块组织，不作为运行依赖或精度依据。
 - 阅读辅助：[Docsaid YOLOv2 notes](https://docsaid.org/en/papers/object-detection/yolov2/)。算法定义仍以论文和 Darknet 配置为准。
 
-这里实现的是 YOLOv2 单阶段检测器的教学型 PyTorch 路径，不包括 YOLO9000 的 WordTree 和检测/分类联合训练。模型拓扑以 Darknet-19 和 passthrough 特征为核心，但当前没有导入官方 ImageNet 预训练权重，因此不能称为完整论文复现，也不应期待未经训练的模型有可用检测精度。
+这里实现的是 YOLOv2 单阶段检测器的教学型 PyTorch 路径，不包括 YOLO9000 的 WordTree 和检测/分类联合训练。模型拓扑以 Darknet-19 和 passthrough 特征为核心；训练入口可显式加载官方 Darknet-19 ImageNet 分类权重的前 18 个特征卷积块，检测专属层仍随机初始化。权重不会自动下载。ImageNet 分类预训练不等于官方 YOLOv2 检测器权重，也不能单独视为完整论文复现。
 
 ## YOLOv2 的主要变化
 
@@ -63,12 +63,17 @@ P(class | object) = softmax(class_logits)
 - 训练：
 
 ```bash
+mkdir -p weights/yolov2
+curl -fL https://pjreddie.com/media/files/darknet19_448.weights \
+  -o weights/yolov2/darknet19_448.weights
+
 python scripts/train_yolov2.py \
   --dataset-root /path/to/yolo_voc2007_2012_trainmix \
+  --pretrained-darknet weights/yolov2/darknet19_448.weights \
   --device cuda
 ```
 
-VOC 数据应为配置中的 YOLO TXT 结构：`images/train`, `labels/train`, `images/val`, `labels/val`，类别顺序与 `configs/datasets/voc0712_trainmix.yaml` 一致。当前配置按 416 输入训练、有效 batch 64、每 10 个 epoch 保存可恢复的 `last.pt`，评估周期内的最佳权重保存为 `best.pt`。配置中的训练轮数与学习率是本项目的起始方案，不是声称逐项复刻 Darknet 的训练调度；请在完整数据训练后看曲线和验证指标再决定调整。
+权重来源是[官方 Darknet ImageNet 权重页](https://pjreddie.com/darknet/imagenet/)。该文件是 448 输入的分类 checkpoint；加载器会复制 Darknet-19 前 18 个卷积块的卷积核和 BatchNorm 状态，并跳过 1000 类分类卷积。分类输出层与检测专属层不迁移。SHA256 为 `77bd0b33f92522a97d6667c5d6cb118d4928bec40f21872f5b4965231ac2167b`；`weights/` 已加入 `.gitignore`。VOC 数据应为配置中的 YOLO TXT 结构：`images/train`, `labels/train`, `images/val`, `labels/val`，类别顺序与 `configs/datasets/voc0712_trainmix.yaml` 一致。当前配置按 416 输入训练、有效 batch 64、每 10 个 epoch 保存可恢复的 `last.pt`，评估周期内的最佳权重保存为 `best.pt`。配置中的训练轮数与学习率是本项目的起始方案，不是声称逐项复刻 Darknet 的训练调度。
 
 - 评估：
 
@@ -107,4 +112,6 @@ python scripts/visualize_yolov2_predictions.py \
 
 ## 验证状态
 
-当前代码验证状态和实际运行结果见[YOLOv2 实现与 smoke 验证记录](../reports/yolov2_implementation_smoke_20261005.md)。完整 VOC 训练、官方 Darknet 权重加载、WordTree 联合训练、动态多尺度训练和 ONNX/设备后端部署尚不包含在本版本中。不要仅凭单步 smoke run 推断 VOC mAP 或模型可用性。
+已完成 VOC 2007 train + VOC 2012 trainval 上的 165 epoch 训练，并在 VOC 2007 val 与 VOC 2007 test 上完整评估。后续固定其余设置、以 `1e-5` 续训 30 epochs，没有超过原验证最佳值；该对照见[续训实验记录](../experiments/yolov2/voc0712_low_lr_continuation_20261006.md)。当前推荐权重仍为 epoch165，在 VOC2007 test 得到 mAP50 `0.694`、mAP50:95 `0.394`；YOLOv1 对比、逐类差异、训练曲线、数据分析和预测可视化见[完整训练报告](../reports/yolov2_voc0712_vs_yolov1_20261005.md)。`runs/` 下的权重和图表是本机实验产物并被 Git 忽略；推理用原 run 的 `best_inference.pt`，续训恢复点为 epoch195 的 `last.pt`。基础实现与有界 smoke 记录见[实现验证记录](../reports/yolov2_implementation_smoke_20261005.md)。
+
+WordTree 联合训练、动态多尺度训练和 ONNX/设备后端部署尚不包含在本版本中。

@@ -83,6 +83,17 @@ def _set_backbone_trainability(model: torch.nn.Module, trainable: bool) -> None:
         setter(trainable)
 
 
+def _restore_optimizer_lr_multipliers(
+    optimizer: torch.optim.Optimizer,
+    configured_multipliers: list[float],
+) -> None:
+    """Keep recipe LR multipliers when checkpoint state restores optimizer groups."""
+    if len(optimizer.param_groups) != len(configured_multipliers):
+        raise ValueError("Optimizer group count changed while restoring a checkpoint")
+    for group, multiplier in zip(optimizer.param_groups, configured_multipliers):
+        group["lr_multiplier"] = float(multiplier)
+
+
 def _should_save_last_checkpoint(epoch_number: int, interval_epochs: int, is_final_epoch: bool) -> bool:
     """Save resumable state periodically and always at the end of a run."""
     interval = max(1, int(interval_epochs))
@@ -119,6 +130,8 @@ def train_detector(
     model_config = dict(recipe.get("model", {}))
     if backbone_checkpoint is not None:
         model_config["backbone_checkpoint"] = str(Path(backbone_checkpoint).expanduser().resolve())
+    if model_config.get("backbone_checkpoint") and model_config.get("backbone_weights"):
+        raise ValueError("Choose either model.backbone_checkpoint or model.backbone_weights, not both")
     recipe["model"] = model_config
     project_root = Path(__file__).resolve().parents[2]
     dataset_config_path = Path(recipe["dataset_config"]).expanduser()
@@ -170,7 +183,22 @@ def train_detector(
         persistent_workers=workers > 0,
     )
     model = build_model(model_config, len(dataset_config["class_names"])).to(device)
-    if model_config.get("architecture", "yolov1") == "yolov2":
+    architecture = str(model_config.get("architecture", "yolov1"))
+    if model_config.get("backbone_checkpoint") and not resume:
+        if architecture == "yolov2":
+            loaded_blocks = model.load_darknet19_weights(model_config["backbone_checkpoint"])
+            print(f"Loaded pretrained Darknet-19 convolution blocks: {loaded_blocks}", flush=True)
+        elif architecture == "yolov3":
+            loaded_blocks = model.load_darknet53_weights(model_config["backbone_checkpoint"])
+            print(f"Loaded pretrained Darknet-53 convolution blocks: {loaded_blocks}", flush=True)
+        else:
+            raise ValueError(f"{architecture} does not support Darknet backbone checkpoints")
+    elif model_config.get("backbone_weights") and not resume:
+        if architecture != "yolov3":
+            raise ValueError(f"{architecture} does not support named TorchVision backbone weights")
+        loaded_weights = model.load_torchvision_backbone_weights(model_config["backbone_weights"])
+        print(f"Loaded TorchVision {model.backbone_name} weights: {loaded_weights}", flush=True)
+    if architecture == "yolov2":
         from x_yolo.models.yolov2.loss import YoloV2Loss, build_targets as build_yolov2_targets
         from x_yolo.models.yolov2.postprocess import decode_predictions as decode_yolov2
 
@@ -187,6 +215,32 @@ def train_detector(
         decoder = partial(decode_yolov2, anchors=model.anchors)
         loss_function = YoloV2Loss(
             len(dataset_config["class_names"]), model.anchors, **recipe.get("loss", {})
+        ).to(device)
+    elif architecture == "yolov3":
+        from x_yolo.models.yolov3.loss import YoloV3Loss, build_targets as build_yolov3_targets
+        from x_yolo.models.yolov3.postprocess import decode_predictions as decode_yolov3
+
+        expected_grid_size = int(recipe["input_size"]) // 32
+        if int(recipe["input_size"]) % 32 or int(recipe["grid_size"]) != expected_grid_size:
+            raise ValueError("YOLOv3 input_size must be divisible by 32 and grid_size must equal input_size / 32")
+        if int(recipe.get("boxes_per_cell", 3)) != 3:
+            raise ValueError("YOLOv3 predicts three anchors per detection scale")
+        target_builder = partial(
+            build_yolov3_targets,
+            num_classes=len(dataset_config["class_names"]),
+            anchors=model.anchors.detach().cpu(),
+            anchor_masks=model.anchor_masks,
+        )
+        decoder = partial(
+            decode_yolov3,
+            anchors=model.anchors,
+            anchor_masks=model.anchor_masks,
+        )
+        loss_function = YoloV3Loss(
+            len(dataset_config["class_names"]),
+            model.anchors,
+            model.anchor_masks,
+            **recipe.get("loss", {}),
         ).to(device)
     else:
         target_builder = partial(
@@ -232,8 +286,10 @@ def train_detector(
     target_epochs = int(epochs_override or recipe["epochs"])
     start_epoch = 0
     best_map = -1.0
+    configured_lr_multipliers = [float(group.get("lr_multiplier", 1.0)) for group in optimizer.param_groups]
     if resume:
         checkpoint = load_checkpoint(resume, model, optimizer, map_location=device)
+        _restore_optimizer_lr_multipliers(optimizer, configured_lr_multipliers)
         _move_optimizer(optimizer, device)
         start_epoch = int(checkpoint["epoch"])
         best_map = float(checkpoint.get("best_metric", -1.0))
@@ -287,6 +343,7 @@ def train_detector(
         epoch_totals: dict[str, float] = {}
         epoch_steps = 0
         epoch_ignored = 0
+        accumulated_micro_batches = 0
         for batch_index, (images, box_lists, _names, _sizes) in enumerate(train_loader):
             if max_steps is not None and global_step >= max_steps:
                 max_steps_hit = True
@@ -294,17 +351,35 @@ def train_detector(
             images = images.to(device, non_blocking=True)
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=precision == "bf16"):
                 predictions = model(images)
-            if model_config.get("architecture", "yolov1") == "yolov2":
+            if architecture == "yolov2":
                 targets = target_builder(box_lists, grid_size=int(predictions.shape[1]))
+            elif architecture == "yolov3":
+                grid_sizes = [(int(output.shape[1]), int(output.shape[2])) for output in predictions]
+                targets = target_builder(box_lists, grid_sizes=grid_sizes)
             else:
                 targets = target_builder(box_lists)
             # Keep coordinate/IoU and squared-error arithmetic in FP32 even
             # when backbone/head convolutions run in BF16.
-            losses = loss_function(predictions.float(), targets)
+            loss_predictions = (
+                [prediction.float() for prediction in predictions]
+                if architecture == "yolov3"
+                else predictions.float()
+            )
+            losses = loss_function(loss_predictions, targets)
             (losses["total"] / accumulation_steps).backward()
+            accumulated_micro_batches += 1
             at_accumulation_boundary = (batch_index + 1) % accumulation_steps == 0
             at_last_batch = batch_index + 1 == len(train_loader)
-            if at_accumulation_boundary or at_last_batch:
+            at_step_limit = max_steps is not None and global_step + 1 >= max_steps
+            if at_accumulation_boundary or at_last_batch or at_step_limit:
+                # Epochs and bounded smoke runs may end with a partial
+                # accumulation window. Restore its true mean gradient before
+                # stepping instead of silently dropping or underweighting it.
+                if accumulated_micro_batches < accumulation_steps:
+                    correction = accumulation_steps / accumulated_micro_batches
+                    for parameter in model.parameters():
+                        if parameter.grad is not None:
+                            parameter.grad.mul_(correction)
                 progress_epoch = epoch + (batch_index + 1) / max(len(train_loader), 1)
                 base_lr = float(optimizer_config["learning_rate"])
                 warmup_epochs = float(optimizer_config.get("warmup_epochs", 0))
@@ -319,6 +394,7 @@ def train_detector(
                     group["lr"] = learning_rate * float(group.get("lr_multiplier", 1.0))
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
+                accumulated_micro_batches = 0
             for name, value in losses.items():
                 epoch_totals[name] = epoch_totals.get(name, 0.0) + float(value.detach())
             epoch_ignored += targets.ignored_ground_truths

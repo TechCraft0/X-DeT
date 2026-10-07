@@ -1,14 +1,17 @@
 import numpy as np
+import pytest
 import torch
 from torch import nn
 from PIL import Image, ImageDraw
 
 from x_yolo.data.dataset import _apply_random_geometry
-from x_yolo.evaluation.metrics import evaluate_predictions
+from x_yolo.evaluation.metrics import _integral_ap, evaluate_predictions
 from x_yolo.models.yolov1.loss import YoloV1Loss, build_targets
 from x_yolo.models.yolov1.postprocess import class_aware_nms, decode_predictions
+from x_yolo.training.checkpoint import load_checkpoint, save_checkpoint
 from x_yolo.training.trainer import (
     _optimizer_parameter_groups,
+    _restore_optimizer_lr_multipliers,
     _set_backbone_trainability,
     _should_save_last_checkpoint,
 )
@@ -45,6 +48,27 @@ def test_last_checkpoint_saves_at_interval_and_at_final_epoch() -> None:
     assert _should_save_last_checkpoint(epoch_number=60, interval_epochs=10, is_final_epoch=False)
     assert not _should_save_last_checkpoint(epoch_number=61, interval_epochs=10, is_final_epoch=False)
     assert _should_save_last_checkpoint(epoch_number=61, interval_epochs=10, is_final_epoch=True)
+
+
+def test_resume_keeps_backbone_lr_multiplier_from_current_recipe(tmp_path) -> None:
+    source_model = _TinyTransferModel()
+    source_optimizer = torch.optim.SGD(
+        _optimizer_parameter_groups(source_model, 1e-3, backbone_lr_multiplier=1.0),
+        momentum=0.9,
+    )
+    checkpoint_path = tmp_path / "checkpoint.pt"
+    save_checkpoint(checkpoint_path, source_model, source_optimizer, 10, 0.2, {})
+
+    resumed_model = _TinyTransferModel()
+    resumed_optimizer = torch.optim.SGD(
+        _optimizer_parameter_groups(resumed_model, 1e-3, backbone_lr_multiplier=0.1),
+        momentum=0.9,
+    )
+    configured = [float(group.get("lr_multiplier", 1.0)) for group in resumed_optimizer.param_groups]
+    load_checkpoint(checkpoint_path, resumed_model, resumed_optimizer)
+    _restore_optimizer_lr_multipliers(resumed_optimizer, configured)
+
+    assert [group["lr_multiplier"] for group in resumed_optimizer.param_groups] == [1.0, 0.1]
 
 
 def test_class_aware_nms_matches_torchvision_batched_nms() -> None:
@@ -157,3 +181,9 @@ def test_decode_and_ap_use_xyxy_pixel_contract() -> None:
     )
     assert report["mAP50"] == 1.0
     assert report["mAP50_95"] == 1.0
+
+
+def test_integral_ap_uses_reverse_precision_envelope() -> None:
+    recall = torch.tensor([0.25, 0.5, 0.75, 1.0])
+    precision = torch.tensor([1.0, 0.5, 0.75, 0.4])
+    assert _integral_ap(recall, precision) == pytest.approx(0.725)

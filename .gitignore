@@ -4,5 +4,7 @@ __pycache__/
 runs/
 exports/
 data/
+weights/
+/3dparty/
 
 .vscode/

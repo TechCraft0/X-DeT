@@ -45,7 +45,17 @@ def build_model(model_config: dict[str, Any] | None, num_classes: int):
         from x_yolo.models.yolov2.model import YoloV2
 
         return YoloV2(num_classes, anchors=config.get("anchors"))
+    if architecture == "yolov3":
+        from x_yolo.models.yolov3.model import YoloV3
+
+        return YoloV3(
+            num_classes,
+            anchors=config.get("anchors"),
+            anchor_masks=config.get("anchor_masks"),
+            backbone_name=str(config.get("backbone_name", "darknet53")),
+            backbone_weights=config.get("backbone_weights"),
+        )
     raise ValueError(
         f"Unknown model architecture {architecture!r}; available: "
-        "yolov1, yolov1_resnet50_transfer, yolov1_torchvision_convhead, yolov2"
+        "yolov1, yolov1_resnet50_transfer, yolov1_torchvision_convhead, yolov2, yolov3"
     )

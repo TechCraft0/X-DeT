@@ -24,8 +24,7 @@ def _integral_ap(recall: torch.Tensor, precision: torch.Tensor) -> float:
         return 0.0
     mrec = torch.cat((recall.new_zeros(1), recall, recall.new_ones(1)))
     mpre = torch.cat((precision.new_zeros(1), precision, precision.new_zeros(1)))
-    for index in range(mpre.numel() - 2, -1, -1):
-        mpre[index] = torch.maximum(mpre[index], mpre[index + 1])
+    mpre = torch.cummax(mpre.flip(0), dim=0).values.flip(0)
     changes = torch.where(mrec[1:] != mrec[:-1])[0]
     return float(((mrec[changes + 1] - mrec[changes]) * mpre[changes + 1]).sum().item())
 

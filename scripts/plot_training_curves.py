@@ -40,7 +40,9 @@ def plot_curves(run_dir: Path, output_prefix: Path | None = None) -> tuple[Path,
     run_config_path = run_dir / "run_config.yaml"
     run_config = yaml.safe_load(run_config_path.read_text(encoding="utf-8")) if run_config_path.exists() else {}
     architecture = str(run_config.get("recipe", {}).get("model", {}).get("architecture", "yolov1"))
-    architecture_label = {"yolov1": "YOLOv1", "yolov2": "YOLOv2"}.get(architecture, architecture)
+    architecture_label = {"yolov1": "YOLOv1", "yolov2": "YOLOv2", "yolov3": "YOLOv3"}.get(
+        architecture, architecture
+    )
 
     epochs = [int(row["epoch"]) for row in rows]
     validation_rows = [row for row in rows if isinstance(row.get("validation"), dict)]

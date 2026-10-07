@@ -1,0 +1,65 @@
+# Fixed-resolution VOC recipe aligned with the project's YOLOv2 data split.
+# Supply --pretrained-darknet53 explicitly; this recipe never downloads weights.
+source:
+  paper: "Redmon and Farhadi, YOLOv3: An Incremental Improvement (2018)"
+  paper_url: https://arxiv.org/abs/1804.02767
+  reference_code: https://github.com/pjreddie/darknet/blob/master/cfg/yolov3-voc.cfg
+  reference_weights: https://pjreddie.com/media/files/darknet53.conv.74
+  adaptations:
+    - "Uses the official VOC anchor priors and three anchor masks, with a fixed 416x416 input."
+    - "Uses a fixed-size epoch schedule and fixed 416 input instead of Darknet's iteration-based schedule with random multi-scale resizing."
+    - "Uses the project's square resize, scale/translation jitter, and HSV augmentation. It does not yet use Darknet's random horizontal flip or its jittered detection augmentation; Darknet VOC validation also resizes directly, while the single-image test path uses letterbox preprocessing."
+    - "YOLOv3's coordinate regression and independent logistic class outputs are version-specific; YOLOv2's loss is not reused."
+model:
+  architecture: yolov3
+  anchors:
+    - [10, 13]
+    - [16, 30]
+    - [33, 23]
+    - [30, 61]
+    - [62, 45]
+    - [59, 119]
+    - [116, 90]
+    - [156, 198]
+    - [373, 326]
+  anchor_masks:
+    - [6, 7, 8]
+    - [3, 4, 5]
+    - [0, 1, 2]
+dataset_config: configs/datasets/voc0712_trainmix.yaml
+input_size: 416
+grid_size: 13
+boxes_per_cell: 3
+epochs: 200
+micro_batch_size: 4
+effective_batch_size: 64
+num_workers: 4
+seed: 42
+checkpoint_interval_epochs: 10
+freeze_backbone_epochs: 0
+optimizer:
+  name: SGD
+  learning_rate: 0.001
+  warmup_initial_learning_rate: 0.0001
+  warmup_epochs: 4
+  momentum: 0.9
+  weight_decay: 0.0005
+  decay_epochs: [160, 180]
+  decay_factor: 0.1
+training_augmentation:
+  scale_range: [0.8, 1.2]
+  translate: 0.2
+  saturation: 1.5
+  exposure: 1.5
+  hue: 0.1
+loss:
+  coord_scale: 1.0
+  object_scale: 1.0
+  noobject_scale: 1.0
+  class_scale: 1.0
+  ignore_iou_threshold: 0.5
+evaluation:
+  interval_epochs: 5
+  confidence_threshold: 0.001
+  nms_iou_threshold: 0.45
+  max_detections: 100

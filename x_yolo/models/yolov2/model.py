@@ -1,6 +1,10 @@
 """Darknet-19 based YOLOv2 detector with its passthrough feature route."""
 from __future__ import annotations
 
+import struct
+from pathlib import Path
+
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -94,6 +98,63 @@ class YoloV2(nn.Module):
             elif isinstance(module, nn.BatchNorm2d):
                 nn.init.ones_(module.weight)
                 nn.init.zeros_(module.bias)
+
+    @torch.no_grad()
+    def load_darknet19_weights(self, path: str | Path) -> int:
+        """Load official Darknet-19 classifier weights into the first 18 conv blocks.
+
+        Accepts the full `darknet19_448.weights` file or its `.conv.23` prefix.
+        The detector-only layers remain at their normal random initialization.
+        """
+        weight_path = Path(path).expanduser()
+        data = weight_path.read_bytes()
+        if len(data) < 16:
+            raise ValueError(f"Darknet weight file is truncated: {weight_path}")
+
+        major, minor, _revision = struct.unpack("<3i", data[:12])
+        seen_bytes = 8 if (major * 10 + minor) >= 2 and major < 1000 and minor < 1000 else 4
+        header_bytes = 12 + seen_bytes
+        if len(data) < header_bytes:
+            raise ValueError(f"Darknet weight header is truncated: {weight_path}")
+
+        blocks = [block for block in self.early if isinstance(block, nn.Sequential)]
+        blocks.extend(self.route)
+        blocks.extend(list(self.deep)[:5])
+        if len(blocks) != 18:
+            raise RuntimeError(f"Expected 18 Darknet-19 feature blocks, found {len(blocks)}")
+
+        expected_floats = sum(
+            4 * block[1].num_features + block[0].weight.numel() for block in blocks
+        )
+        values = np.frombuffer(data, dtype="<f4", offset=header_bytes)
+        unused_floats = values.size - expected_floats
+        # The full ImageNet classifier adds one unnormalized 1x1, 1000-class conv.
+        classifier_floats = 1000 + 1000 * 1024
+        if unused_floats not in (0, classifier_floats):
+            raise ValueError(
+                "Expected Darknet-19 448 weights (18 feature blocks, optionally followed "
+                f"by the 1000-class layer); found {values.size} float values in {weight_path}"
+            )
+
+        offset = 0
+
+        def copy_values(target: torch.Tensor) -> None:
+            nonlocal offset
+            count = target.numel()
+            source = torch.from_numpy(values[offset : offset + count].copy()).view_as(target)
+            target.copy_(source.to(device=target.device, dtype=target.dtype))
+            offset += count
+
+        for block in blocks:
+            convolution, batch_norm = block[0], block[1]
+            # Darknet stores BN beta, gamma, running mean, running variance, then kernels.
+            copy_values(batch_norm.bias)
+            copy_values(batch_norm.weight)
+            copy_values(batch_norm.running_mean)
+            copy_values(batch_norm.running_var)
+            copy_values(convolution.weight)
+
+        return len(blocks)
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:
         if images.ndim != 4 or images.shape[1] != 3:
