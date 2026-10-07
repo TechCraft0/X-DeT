@@ -10,7 +10,7 @@ X-DeT 是面向目标检测学习、研究与落地的 PyTorch 项目。我们�
 ![PyTorch](https://img.shields.io/badge/Framework-PyTorch-EE4C2C?logo=pytorch&logoColor=white)
 ![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)
 
-[项目路线](#项目路线) · [支持版本](#支持版本) · [快速开始](#快速开始) · [训练与可视化](#训练与可视化) · [学习文档](#学习文档)
+[项目路线](#项目路线) · [支持版本](#支持版本) · [计划中的检测器](#计划中的检测器) · [快速开始](#快速开始) · [训练与可视化](#训练与可视化) · [学习文档](#学习文档)
 
 </div>
 
@@ -63,6 +63,18 @@ YOLOv2 可显式加载 Darknet-19 ImageNet 分类权重初始化 backbone，检�
 YOLOv3 默认路径可加载 Darknet-53 ImageNet 分类权重，保留论文骨干；另有 ConvNeXt-Small + YOLOv3 neck/head 的工程变体，使用 TorchVision ImageNet-1K 分类预训练。两个配方和它们与论文/官方实现的差异见 [YOLOv3 版本说明](docs/versions/yolov3.md)。
 
 在 VOC 2007 test 上，当前 YOLOv2 配方达到 mAP50 `0.694`、mAP50:95 `0.394`；同一评估流程下的 YOLOv1 基线分别为 `0.688` 和 `0.318`。逐类比较、训练图表和可用 checkpoint 见 [YOLOv2 与 YOLOv1 实验报告](docs/reports/yolov2_voc0712_vs_yolov1_20261005.md)。
+
+## 计划中的检测器
+
+下列方法尚未作为 X-DeT 模型实现。当前 YOLOv3 实验完成后，将基于同一 VOC 数据划分逐个实现、训练和评估；各自保留有代表性的结构与训练配方，并统一报告 VOC AP50、AP50:95、训练曲线和预测可视化。具体实施边界和参考版本见[检测器路线说明](docs/roadmap/detectors.md)。
+
+| 方法 | 状态 | 计划实现重点 | 参考实现 |
+|---|---|---|---|
+| **RTMDet（水平框）** | 计划中 | CSPNeXt + PAFPN、多尺度 anchor-free 检测头、Dynamic Soft Label Assigner、Quality Focal Loss 与 GIoU；保留 Mosaic/MixUp、EMA 和末段关闭强增强等配方要点 | [MMDetection RTMDet 配置](https://github.com/open-mmlab/mmdetection/blob/cfd5d3a985b0249de009b67d04f37263e11cdf3d/configs/rtmdet/rtmdet_s_8xb32-300e_coco.py) |
+| **FCOS** | 计划中 | ResNet-FPN 多层级逐点预测、LTRB 距离回归、centerness 分支、Focal Loss 与 IoU Loss；显式讲清点分配、尺度范围和解码 | [MMDetection FCOS 配置](https://github.com/open-mmlab/mmdetection/blob/cfd5d3a985b0249de009b67d04f37263e11cdf3d/configs/fcos/fcos_r50-caffe_fpn_gn-head_1x_coco.py) |
+| **RTMDet-R2（旋转框）** | 后续研究方向 | 在标准 RTMDet 完成后再考虑；这是面向遥感旋转框的扩展，包含角度回归与旋转 IoU，和本表中的水平框 RTMDet 任务不同 | [RTMDet-R2 参考仓库](https://github.com/Zeba-Xie/RTMDet-R2) |
+
+参考仓库固定在本地 `3dparty/` 中的提交及许可证、论文来源和实施边界记录在[检测器路线说明](docs/roadmap/detectors.md)。参考代码用于理解和对照；X-DeT 的实现会放在本仓库并自行验证，不把 MMDetection 当作默认运行依赖。
 
 ## 快速开始
 
