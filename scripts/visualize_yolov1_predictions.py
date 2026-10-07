@@ -143,6 +143,14 @@ def visualize_predictions(
             anchors=model.anchors,
             anchor_masks=model.anchor_masks,
         )
+    elif architecture == "fcos":
+        from x_yolo.models.fcos.postprocess import decode_predictions as decode_fcos
+
+        decoder = partial(decode_fcos, strides=model.strides)
+    elif architecture == "rtmdet":
+        from x_yolo.models.rtmdet.postprocess import decode_predictions as decode_rtmdet
+
+        decoder = partial(decode_rtmdet, strides=model.strides)
     else:
         decoder = decode_yolov1
     model.eval()

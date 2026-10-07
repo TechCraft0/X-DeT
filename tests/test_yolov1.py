@@ -5,7 +5,7 @@ from torch import nn
 from PIL import Image, ImageDraw
 
 from x_yolo.data.dataset import _apply_random_geometry
-from x_yolo.evaluation.metrics import _integral_ap, evaluate_predictions
+from x_yolo.evaluation.metrics import _integral_ap, average_precision_at_iou, evaluate_predictions
 from x_yolo.models.yolov1.loss import YoloV1Loss, build_targets
 from x_yolo.models.yolov1.postprocess import class_aware_nms, decode_predictions
 from x_yolo.training.checkpoint import load_checkpoint, save_checkpoint
@@ -187,3 +187,20 @@ def test_integral_ap_uses_reverse_precision_envelope() -> None:
     recall = torch.tensor([0.25, 0.5, 0.75, 1.0])
     precision = torch.tensor([1.0, 0.5, 0.75, 0.4])
     assert _integral_ap(recall, precision) == pytest.approx(0.725)
+
+
+def test_ap_matches_one_prediction_per_ground_truth_in_score_order() -> None:
+    ground_truth = torch.tensor([[0.0, 0.0, 10.0, 10.0], [20.0, 20.0, 30.0, 30.0]])
+    predictions = [{
+        "boxes": torch.tensor([
+            [0.0, 0.0, 10.0, 10.0],  # first box: true positive
+            [0.0, 0.0, 10.0, 10.0],  # duplicate: false positive
+            [20.0, 20.0, 30.0, 30.0],  # second box: true positive
+            [40.0, 40.0, 50.0, 50.0],  # unmatched: false positive
+        ]),
+        "scores": torch.tensor([0.9, 0.8, 0.7, 0.6]),
+        "labels": torch.zeros(4, dtype=torch.long),
+    }]
+    targets = [{"boxes": ground_truth, "labels": torch.zeros(2, dtype=torch.long)}]
+
+    assert average_precision_at_iou(predictions, targets, num_classes=1, iou_threshold=0.5)[0] == pytest.approx(5 / 6)

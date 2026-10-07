@@ -126,4 +126,4 @@ python scripts/visualize_yolov3_predictions.py \
 - recipe 固定 416 输入，不包含官方 cfg `random=1` 的随机多尺度训练；官方训练还用 `jitter=0.3`。本项目当前用固定输入、`scale_range=0.8–1.2`、`translate=0.2` 和 HSV 扰动，尚未加入随机水平翻转或同等的 jittered crop。训练 schedule 由 epoch、warmup 和衰减节点表达。
 - 同一个 cell/anchor 的多目标冲突以“保留 anchor 形状 IoU 更高者”解决，是教学实现的确定性规则；Darknet 代码可能依赖目标遍历顺序处理碰撞。
 - 当前训练 recipe 的几何增强是 scale/translation 与 HSV 颜色扰动，没有随机水平翻转。Darknet 与 ConvNeXt 两个 recipe 共用此数据流程，因此 backbone 对照不会把增强差异混入结果。
-- 官方 Darknet-53 预训练权重已用于 VOC 训练；当前完整运行尚未结束，验证集最好结果和 VOC test 最终指标应以对应 run 目录及实验报告为准。ConvNeXt-Small 对照仍待完整训练与 test split 评估，不能把尚未完成的变体写成已提升。
+- ConvNeXt-Small + YOLOv3-head 变体已完成训练和 VOC 2007 test 评估：best checkpoint 为 epoch 185，test mAP@0.5 为 0.7937、mAP@0.5:0.95 为 0.4454。完整设置、学习率观察、逐类结果与可视化见[实验报告](../reports/yolov3_voc0712_convnext_small_20261008.md)。它是工程变体，不能将与 YOLOv1/v2 的差值单独归因于 YOLOv3 架构。

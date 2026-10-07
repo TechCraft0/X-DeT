@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
+import numpy as np
 import torch
 
 from x_yolo.models.yolov1.postprocess import decode_predictions
@@ -35,44 +36,76 @@ def average_precision_at_iou(
     num_classes: int,
     iou_threshold: float,
 ) -> dict[int, float]:
-    """Continuous integral AP, matching each ground-truth box at most once."""
+    """Continuous integral AP with confidence-ordered, one-to-one matching.
+
+    IoUs are calculated per image in vectorized NumPy arrays. This preserves
+    greedy confidence-order matching while avoiding millions of tiny Torch
+    operations during multi-threshold VOC evaluation.
+    """
     class_ap: dict[int, float] = {}
     for class_id in range(num_classes):
-        gt_by_image: dict[int, torch.Tensor] = {}
         total_ground_truths = 0
-        detections: list[tuple[float, int, torch.Tensor]] = []
+        score_parts: list[np.ndarray] = []
+        best_iou_parts: list[np.ndarray] = []
+        matched_gt_parts: list[np.ndarray] = []
+        gt_key_offset = 0
         for image_index, target in enumerate(targets):
-            mask = target["labels"] == class_id
-            boxes = target["boxes"][mask].detach().cpu()
-            gt_by_image[image_index] = boxes
-            total_ground_truths += boxes.shape[0]
+            target_mask = target["labels"] == class_id
+            ground_truth = target["boxes"][target_mask].detach().cpu().numpy().astype(np.float32, copy=False)
+            total_ground_truths += len(ground_truth)
             pred = predictions[image_index]
             pred_mask = pred["labels"] == class_id
-            for box, score in zip(pred["boxes"][pred_mask], pred["scores"][pred_mask]):
-                detections.append((float(score.detach().cpu()), image_index, box.detach().cpu()))
+            boxes = pred["boxes"][pred_mask].detach().cpu().numpy().astype(np.float32, copy=False)
+            scores = pred["scores"][pred_mask].detach().cpu().numpy().astype(np.float32, copy=False)
+            score_parts.append(scores)
+            if len(boxes) and len(ground_truth):
+                top_left = np.maximum(boxes[:, None, :2], ground_truth[None, :, :2])
+                bottom_right = np.minimum(boxes[:, None, 2:], ground_truth[None, :, 2:])
+                intersection = np.prod(np.maximum(bottom_right - top_left, 0), axis=2)
+                box_area = np.prod(np.maximum(boxes[:, 2:] - boxes[:, :2], 0), axis=1)
+                gt_area = np.prod(np.maximum(ground_truth[:, 2:] - ground_truth[:, :2], 0), axis=1)
+                union = box_area[:, None] + gt_area[None, :] - intersection
+                overlaps = intersection / np.maximum(union, 1e-9)
+                best_gt = overlaps.argmax(axis=1)
+                best_iou_parts.append(overlaps[np.arange(len(boxes)), best_gt])
+                matched_gt_parts.append(gt_key_offset + best_gt)
+            else:
+                # An image without a GT for this class contributes only false
+                # positives; the dummy key is never eligible at IoU >= 0.5.
+                best_iou_parts.append(np.zeros(len(boxes), dtype=np.float32))
+                matched_gt_parts.append(np.full(len(boxes), -1, dtype=np.int64))
+            gt_key_offset += len(ground_truth)
         if total_ground_truths == 0:
             continue
-        detections.sort(key=lambda item: item[0], reverse=True)
-        matched = {image_index: torch.zeros(boxes.shape[0], dtype=torch.bool) for image_index, boxes in gt_by_image.items()}
-        true_positive = torch.zeros(len(detections), dtype=torch.float32)
-        false_positive = torch.zeros(len(detections), dtype=torch.float32)
-        for detection_index, (_, image_index, box) in enumerate(detections):
-            ground_truth = gt_by_image[image_index]
-            if ground_truth.shape[0] == 0:
-                false_positive[detection_index] = 1
-                continue
-            overlaps = _iou_one_to_many(box, ground_truth)
-            best_iou, best_index = overlaps.max(dim=0)
-            if best_iou >= iou_threshold and not matched[image_index][best_index]:
-                true_positive[detection_index] = 1
-                matched[image_index][best_index] = True
-            else:
-                false_positive[detection_index] = 1
-        tp = true_positive.cumsum(0)
-        fp = false_positive.cumsum(0)
-        recall = tp / total_ground_truths
-        precision = tp / (tp + fp).clamp_min(1e-9)
-        class_ap[class_id] = _integral_ap(recall, precision)
+        scores = np.concatenate(score_parts)
+        best_ious = np.concatenate(best_iou_parts)
+        matched_gt = np.concatenate(matched_gt_parts)
+        order = np.argsort(-scores, kind="stable")
+        scores = scores[order]
+        best_ious = best_ious[order]
+        matched_gt = matched_gt[order]
+
+        eligible = np.flatnonzero(best_ious >= iou_threshold)
+        true_positive = np.zeros(len(scores), dtype=np.float32)
+        if len(eligible):
+            # For a GT, only its highest-confidence eligible prediction is TP.
+            # Unique keys keep the first occurrence in the stable score order.
+            _, first_for_gt = np.unique(matched_gt[eligible], return_index=True)
+            true_positive[eligible[first_for_gt]] = 1.0
+        false_positive = 1.0 - true_positive
+        true_positive = np.cumsum(true_positive, dtype=np.float32)
+        false_positive = np.cumsum(false_positive, dtype=np.float32)
+        recall = true_positive / total_ground_truths
+        precision = true_positive / np.maximum(true_positive + false_positive, 1e-9)
+        recall = np.concatenate((np.zeros(1, dtype=np.float32), recall, np.ones(1, dtype=np.float32)))
+        precision = np.concatenate((np.zeros(1, dtype=np.float32), precision, np.zeros(1, dtype=np.float32)))
+        precision = np.maximum.accumulate(precision[::-1])[::-1]
+        recall_changes = np.flatnonzero(recall[1:] != recall[:-1])
+        ap = np.sum(
+            (recall[recall_changes + 1] - recall[recall_changes]) * precision[recall_changes + 1],
+            dtype=np.float32,
+        )
+        class_ap[class_id] = float(ap)
     return class_ap
 
 

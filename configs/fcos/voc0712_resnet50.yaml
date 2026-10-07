@@ -1,0 +1,50 @@
+source:
+  paper: "FCOS: Fully Convolutional One-Stage Object Detection (2019)"
+  paper_url: https://arxiv.org/abs/1904.01355
+  reference_config: https://github.com/open-mmlab/mmdetection/blob/v3.3.0/configs/fcos/fcos_r50-caffe_fpn_gn-head_1x_coco.py
+  pretrained_weights: "TorchVision ResNet-50 IMAGENET1K_V1; https://download.pytorch.org/models/resnet50-0676ba61.pth"
+  adaptations:
+    - "Own, readable FCOS towers, point assignment, focal/IoU/centerness losses, and decoder; TorchVision supplies ResNet-FPN features only."
+    - "The model predicts on P3-P7 at 416 square input; VOC images are resized to a square by the shared dataset loader."
+    - "Uses ImageNet RGB normalization and a TorchVision ImageNet-pretrained ResNet-50, rather than the reference config's Caffe-pretrained ResNet."
+    - "Uses project HSV/geometric augmentation and a 120-epoch VOC schedule instead of the MMDetection COCO 1x recipe."
+model:
+  architecture: fcos
+  trainable_layers: 5
+  tower_depth: 4
+  channels: 256
+dataset_config: configs/datasets/voc0712_trainmix.yaml
+input_size: 416
+epochs: 120
+micro_batch_size: 8
+effective_batch_size: 16
+validation_batch_size: 8
+precision: bf16
+num_workers: 4
+seed: 42
+freeze_backbone_epochs: 3
+checkpoint_interval_epochs: 10
+requires_pretrained_checkpoint: true
+optimizer:
+  name: SGD
+  learning_rate: 0.005
+  backbone_lr_multiplier: 0.1
+  warmup_initial_learning_rate: 0.00005
+  warmup_epochs: 3
+  momentum: 0.9
+  weight_decay: 0.0001
+  schedule: multistep
+  decay_epochs: [80, 105]
+  decay_factor: 0.1
+training_augmentation:
+  horizontal_flip: 0.5
+  scale_range: [0.8, 1.2]
+  translate: 0.1
+  saturation: 1.2
+  exposure: 1.2
+  hue: 0.05
+evaluation:
+  interval_epochs: 5
+  confidence_threshold: 0.001
+  nms_iou_threshold: 0.5
+  max_detections: 100

@@ -1,0 +1,55 @@
+source:
+  paper: "RTMDet: An Empirical Study of Designing Real-Time Object Detectors (2022)"
+  paper_url: https://arxiv.org/abs/2212.07784
+  reference_config: https://github.com/open-mmlab/mmdetection/blob/v3.3.0/configs/rtmdet/rtmdet_tiny_8xb32-300e_coco.py
+  pretrained_weights: "https://download.openmmlab.com/mmdetection/v3.0/rtmdet/rtmdet_tiny_8xb32-300e_coco/rtmdet_tiny_8xb32-300e_coco_20220902_112414-78e30dcc.pth"
+  license: "RTMDet implementation reference: MMDetection 3.3.0, Apache-2.0"
+  adaptations:
+    - "Standalone CSPNeXt-Tiny, CSPNeXt-PAFPN, separated-BN head, dynamic soft-label assignment, QFL and GIoU; no MMDetection runtime dependency."
+    - "COCO classifier channels are copied by class name for the 20 VOC classes; all other matching backbone, neck and head weights are loaded by shape."
+    - "Uses input size 416 and the project's YOLO-TXT VOC train/validation/test splits; the upstream COCO recipe uses 640 input and cached Mosaic/MixUp."
+    - "Keeps the upstream point strides, dynamic assigner, QFL/GIoU objectives, AdamW family and multiscale CSPNeXt architecture; project resize/color augmentation and a shortened VOC schedule replace the 300-epoch COCO pipeline."
+model:
+  architecture: rtmdet
+  channels: 96
+dataset_config: configs/datasets/voc0712_trainmix.yaml
+input_size: 416
+epochs: 100
+micro_batch_size: 8
+effective_batch_size: 32
+validation_batch_size: 8
+precision: bf16
+num_workers: 4
+seed: 42
+freeze_backbone_epochs: 3
+checkpoint_interval_epochs: 10
+requires_pretrained_checkpoint: true
+assigner:
+  topk: 13
+  soft_center_radius: 3.0
+  iou_cost_weight: 3.0
+optimizer:
+  name: AdamW
+  learning_rate: 0.0005
+  backbone_lr_multiplier: 0.25
+  betas: [0.9, 0.999]
+  weight_decay: 0.05
+  warmup_initial_learning_rate: 0.000005
+  warmup_epochs: 2
+  schedule: cosine
+  cosine_start_epoch: 50
+  eta_min_ratio: 0.05
+training_augmentation:
+  horizontal_flip: 0.5
+  scale_range: [0.8, 1.2]
+  translate: 0.1
+  saturation: 1.2
+  exposure: 1.2
+  hue: 0.05
+loss:
+  bbox_loss_weight: 2.0
+evaluation:
+  interval_epochs: 5
+  confidence_threshold: 0.001
+  nms_iou_threshold: 0.65
+  max_detections: 100

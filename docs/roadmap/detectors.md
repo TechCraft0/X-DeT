@@ -1,6 +1,6 @@
-# RTMDet 与 FCOS 实现路线
+# RTMDet 与 FCOS 实现及实验路线
 
-本文记录 YOLO 系列之后的两种水平框检测器，以及一个独立的旋转框研究方向。这里是实施计划和上游代码审阅记录；在 X-DeT 代码、训练和验证完成前，不代表项目已经支持这些模型。
+本文记录 YOLO 系列之后的两种水平框检测器，以及一个独立的旋转框研究方向。RTMDet-Tiny 和 FCOS 的独立模型/损失/解码实现已落入仓库；完整 VOC 训练、测试和实验结论仍以对应报告为准。
 
 ## 共用实验边界
 
@@ -16,13 +16,13 @@
 
 - 论文：[RTMDet: An Empirical Study of Designing Real-Time Object Detectors](https://arxiv.org/abs/2212.07784)，2022。
 - 上游实现：[OpenMMLab MMDetection](https://github.com/open-mmlab/mmdetection)。本地参考版本为 `v3.3.0-5-gcfd5d3a9`，提交 `cfd5d3a985b0249de009b67d04f37263e11cdf3d`，Apache-2.0。
-- 主要参考配置：[RTMDet-S COCO 配置](https://github.com/open-mmlab/mmdetection/blob/cfd5d3a985b0249de009b67d04f37263e11cdf3d/configs/rtmdet/rtmdet_s_8xb32-300e_coco.py)；核心实现位于上游 `mmdet/models/detectors/rtmdet.py` 与 `mmdet/models/dense_heads/rtmdet_head.py`。
+- 主要参考配置：[RTMDet-Tiny COCO 配置](https://github.com/open-mmlab/mmdetection/blob/cfd5d3a985b0249de009b67d04f37263e11cdf3d/configs/rtmdet/rtmdet_tiny_8xb32-300e_coco.py)；核心实现位于上游 `mmdet/models/detectors/rtmdet.py` 与 `mmdet/models/dense_heads/rtmdet_head.py`。
 
 ### 方法要点
 
 RTMDet 是实时单阶段检测器。参考配置使用 CSPNeXt 主干、CSPNeXt PAFPN，以及在 stride 8/16/32 特征层上工作的无预设宽高 anchor 检测头。检测头通过点位置和到四边的距离解码水平框；训练端以 Dynamic Soft Label Assigner 动态分配正样本，以 Quality Focal Loss 监督分类质量、GIoU Loss 回归框。参考训练配方使用 Cached Mosaic/MixUp、EMA，并在训练后段切换到较弱的增强流水线。
 
-计划实现时保留上述组合的语义，特别是动态软标签分配、回归距离解码、EMA 和训练后段 pipeline switch。先实现水平框版本；不把 RTMDet-R2 的旋转角度、旋转 NMS 或遥感设置混入这个模型。
+X-DeT 保留 CSPNeXt、PAFPN、分层 BN 头、动态软标签分配、回归距离解码、QFL 和 GIoU。当前轻量 VOC recipe 尚未实现缓存 Mosaic/MixUp、EMA 和训练后段 pipeline switch，具体差异记录在版本说明；不把 RTMDet-R2 的旋转角度、旋转 NMS 或遥感设置混入这个模型。
 
 ## FCOS
 
@@ -36,7 +36,7 @@ RTMDet 是实时单阶段检测器。参考配置使用 CSPNeXt 主干、CSPNeXt
 
 FCOS 不生成 anchor 或候选框，而是在 FPN 的多个空间位置预测类别、LTRB 四边距离和 centerness。不同金字塔层负责不同回归范围；训练时依照点是否位于真值框内及尺度范围分配监督。参考配置使用五个 FPN 层（stride 8、16、32、64、128）、Focal Loss、IoU Loss 和 centerness 二元交叉熵，推理时结合分类分数与 centerness 并执行 NMS。
 
-后续实现需把点坐标、回归范围、centerness 目标、距离到 `xyxy` 的转换和图像缩放还原作为显式教学路径。配置中有不同 FCOS 变体（例如 center sampling、归一化回归距离和 GIoU），第一版将锁定一个配置并记录其与论文及原始 FCOS 实现的差异，不混合不同变体的技巧。
+X-DeT 显式实现点坐标、回归范围、centerness 目标、距离到 `xyxy` 的转换和图像缩放还原。当前第一版没有启用 FCOSv2 center sampling，回归采用 IoU loss。配置中有不同 FCOS 变体，后续保持变体间差异明确。
 
 ## RTMDet-R2（后续旋转框方向）
 
@@ -45,12 +45,10 @@ FCOS 不生成 anchor 或候选框，而是在 FPN 的多个空间位置预测�
 - 本地 DOTA 配置使用 `RotatedRTMDetSepBNHead`、距离加角度编码、Rotated IoU Loss 与带旋转 IoU 计算器的动态软标签分配；论文报告针对遥感旋转目标。
 - 它依赖旋转框数据、角度约定、旋转 IoU/NMS 和相应评估协议，故不作为水平框 RTMDet 的同一模型变体，也不进入当前首轮 VOC 对比。
 
-## 实施顺序与完成条件
+## 实施顺序与当前状态
 
-1. YOLOv3 当前训练、VOC test 评估和报告完成后，先实现 RTMDet 水平框版，再实现 FCOS。
-2. 每个模型提供独立模型、损失/目标分配与后处理代码、recipe、训练/评估/推理入口和版本说明；权重不提交到 Git。
-3. 完成 CPU 小样例检查、前向形状与梯度检查、训练恢复检查，再进行明确记录的 VOC 训练和 test 评估。
-4. 保存每 10 epoch 检查点、最佳权重、训练曲线、数据分析和预测可视化；报告明确列出环境、命令、权重来源、指标和实现差异。
-5. 水平框两种方法完成后，依据目标数据和用户后续优先级单独决定是否开展 RTMDet-R2 的旋转框实现。
-
-目前仅完成上游代码与配置审阅，X-DeT 侧 RTMDet、FCOS 和 RTMDet-R2 均尚未实现或训练。
+1. YOLOv3 已完成 VOC 训练、test 评估和报告。
+2. RTMDet-Tiny 已完成 100 epoch VOC 训练、test 评估、曲线、数据分析和预测可视化；结果见 [`RTMDet-Tiny VOC 报告`](../reports/rtmdet_voc0712_tiny_20261008.md)。
+3. RTMDet 与 FCOS 均已有独立模型、损失/目标分配、后处理、recipe 和训练/评估入口；CPU 小样例检查了前向形状、损失/梯度和解码。
+4. FCOS ResNet-50 目前按 120 epoch 配置训练中。完成后需用 validation best 在 VOC 2007 test 上评估，并生成曲线、数据分析、预测可视化与实验报告；checkpoint 和本地实验产物不纳入源码提交。
+5. 两种水平框方法的首轮训练、测试和报告均完成后，再依据目标数据及实验结果决定是否开展 RTMDet-R2 旋转框实现。

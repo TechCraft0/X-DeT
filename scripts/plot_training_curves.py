@@ -40,7 +40,8 @@ def plot_curves(run_dir: Path, output_prefix: Path | None = None) -> tuple[Path,
     run_config_path = run_dir / "run_config.yaml"
     run_config = yaml.safe_load(run_config_path.read_text(encoding="utf-8")) if run_config_path.exists() else {}
     architecture = str(run_config.get("recipe", {}).get("model", {}).get("architecture", "yolov1"))
-    architecture_label = {"yolov1": "YOLOv1", "yolov2": "YOLOv2", "yolov3": "YOLOv3"}.get(
+    architecture_label = {"yolov1": "YOLOv1", "yolov2": "YOLOv2", "yolov3": "YOLOv3",
+                          "fcos": "FCOS", "rtmdet": "RTMDet"}.get(
         architecture, architecture
     )
 
@@ -58,6 +59,8 @@ def plot_curves(run_dir: Path, output_prefix: Path | None = None) -> tuple[Path,
         ("train_object_confidence", "object confidence"),
         ("train_no_object_confidence", "no-object confidence"),
         ("train_giou", "GIoU localization"),
+        ("train_box", "box localization"),
+        ("train_centerness", "centerness"),
         ("train_classification", "classification"),
     ):
         values = [float(row[key]) for row in rows if key in row]
@@ -122,13 +125,17 @@ def plot_curves(run_dir: Path, output_prefix: Path | None = None) -> tuple[Path,
             markersize=3,
             label="backbone learning rate",
         )
-    aux_axis.set(title="Learning rate and ignored targets", xlabel="Epoch", ylabel="Learning rate")
     aux_axis.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
     aux_axis.grid(alpha=0.25)
     ignored_axis = aux_axis.twinx()
-    ignored = [int(row.get("ignored_ground_truths", 0)) for row in rows]
-    ignored_axis.plot(epochs, ignored, color="tab:orange", marker="o", markersize=3, alpha=0.8, label="ignored labels")
-    ignored_axis.set_ylabel("Ignored labels per epoch")
+    has_ignored = any("ignored_ground_truths" in row for row in rows)
+    statistic_key = "ignored_ground_truths" if has_ignored else "train_positives"
+    statistic_label = "ignored labels" if has_ignored else "positive assignments / batch"
+    statistics = [float(row.get(statistic_key, 0)) for row in rows]
+    ignored_axis.plot(epochs, statistics, color="tab:orange", marker="o", markersize=3,
+                      alpha=0.8, label=statistic_label)
+    ignored_axis.set_ylabel("Ignored labels" if has_ignored else "Positive assignments")
+    aux_axis.set(title=f"Learning rate and {statistic_label}", xlabel="Epoch", ylabel="Learning rate")
     if (run_dir / "stage1_run_config.yaml").is_file():
         aux_axis.axvline(30.5, color="black", linestyle="--", alpha=0.65, label="resume after epoch 30")
     first_unfrozen = next(

@@ -55,7 +55,21 @@ def build_model(model_config: dict[str, Any] | None, num_classes: int):
             backbone_name=str(config.get("backbone_name", "darknet53")),
             backbone_weights=config.get("backbone_weights"),
         )
+    if architecture == "fcos":
+        from x_yolo.models.fcos.model import FCOS
+
+        return FCOS(
+            num_classes,
+            backbone_checkpoint=config.get("backbone_checkpoint"),
+            trainable_layers=int(config.get("trainable_layers", 3)),
+            tower_depth=int(config.get("tower_depth", 4)),
+            channels=int(config.get("channels", 256)),
+        )
+    if architecture == "rtmdet":
+        from x_yolo.models.rtmdet.model import RTMDet
+
+        return RTMDet(num_classes, channels=int(config.get("channels", 96)))
     raise ValueError(
         f"Unknown model architecture {architecture!r}; available: "
-        "yolov1, yolov1_resnet50_transfer, yolov1_torchvision_convhead, yolov2, yolov3"
+        "yolov1, yolov1_resnet50_transfer, yolov1_torchvision_convhead, yolov2, yolov3, fcos, rtmdet"
     )
