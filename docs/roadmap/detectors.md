@@ -45,10 +45,20 @@ X-DeT 显式实现点坐标、回归范围、centerness 目标、距离到 `xyxy
 - 本地 DOTA 配置使用 `RotatedRTMDetSepBNHead`、距离加角度编码、Rotated IoU Loss 与带旋转 IoU 计算器的动态软标签分配；论文报告针对遥感旋转目标。
 - 它依赖旋转框数据、角度约定、旋转 IoU/NMS 和相应评估协议，故不作为水平框 RTMDet 的同一模型变体，也不进入当前首轮 VOC 对比。
 
+## 下一批：CornerNet 与 CenterNet
+
+用户已指定参考本地 `3dparty/mmdetection/configs/cornernet/` 和 `configs/centernet/`，排在当前 FCOS 完整训练、VOC07 test 评估之后。
+
+- **CornerNet**：以 [CornerNet: Detecting Objects as Paired Keypoints](https://arxiv.org/abs/1808.01244) 为论文基线，优先对照 `cornernet_hourglass104_8xb6-210e-mstest_coco.py` 和其 COCO checkpoint。实现要覆盖 Hourglass-104、左上/右下角点热图、corner pooling、associative embedding 配对及 offset；它比当前 ResNet 检测器重，先完成显存/吞吐 smoke，再确定可执行的单卡训练 batch 和周期。上游模型卡记录 COCO AP 41.2、8×V100、batch 48、训练显存约 15.9 GB，不能直接推定 16 GB 消费卡上的同配方可跑。
+- **CenterNet（Objects as Points）**：优先以 [Objects as Points](https://arxiv.org/abs/1904.07850) 的 `centernet_r18_8xb16-crop512-140e_coco.py` 为基线；它以中心热图、宽高和局部 offset 表示目标，并在输出峰值处解码框。该子配置关闭 DCNv2，以保持首版算子简单，并保留 CenterNet 原论文的目标表示。
+- `configs/centernet/` 还包含 **CenterNet-Update**（R18/R50 + FPN、多尺度检测头、GIoU、1024 LSJ）配置。这是另一种工程/方法变体，不与 `Objects as Points` 基线混称；若纳入实现，单独命名、记录配置与对比。
+- 两个方法将沿用 VOC07+12 train/val train、VOC07 val 选权重、VOC07 test 最终评估；优先迁移公开 COCO 检测权重，按类名映射类别头。源码运行不依赖 MMDetection；上游 Apache-2.0 来源、checkpoint 链接与 SHA256 写入版本说明。
+
 ## 实施顺序与当前状态
 
 1. YOLOv3 已完成 VOC 训练、test 评估和报告。
 2. RTMDet-Tiny 已完成 100 epoch VOC 训练、test 评估、曲线、数据分析和预测可视化；结果见 [`RTMDet-Tiny VOC 报告`](../reports/rtmdet_voc0712_tiny_20261008.md)。
 3. RTMDet 与 FCOS 均已有独立模型、损失/目标分配、后处理、recipe 和训练/评估入口；CPU 小样例检查了前向形状、损失/梯度和解码。
 4. FCOS ResNet-50 目前按 120 epoch 配置训练中。完成后需用 validation best 在 VOC 2007 test 上评估，并生成曲线、数据分析、预测可视化与实验报告；checkpoint 和本地实验产物不纳入源码提交。
-5. 两种水平框方法的首轮训练、测试和报告均完成后，再依据目标数据及实验结果决定是否开展 RTMDet-R2 旋转框实现。
+5. FCOS 完成后，按上节实现并训练 CornerNet 与 CenterNet 原论文基线；先做轻量 smoke 和显存/吞吐测量，再锁定单卡训练设置，不因硬件约束悄悄更换算法语义。
+6. CornerNet 与 CenterNet 首轮完成后，再依据目标数据及实验结果决定是否开展 RTMDet-R2 旋转框和 CenterNet-Update 变体。
