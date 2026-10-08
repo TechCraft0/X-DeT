@@ -43,7 +43,7 @@ X-DeT 从 YOLO 系列实现起步，方向扩展到更广泛的目标检测研�
 
 | 环节 | 当前状态 | 后续建设 |
 |---|---|---|
-| 模型与论文 | YOLOv1、YOLOv2、YOLOv3 有独立实现；RTMDet-Tiny、FCOS 已实现，VOC 训练/测试进行中 | 持续跟进新论文，保留各方法自己的结构与训练语义 |
+| 模型与论文 | YOLOv1、YOLOv2、YOLOv3、RTMDet-Tiny、FCOS 已实现；CenterNet 与 CornerNet 代码和单元 smoke 已加入，完整训练待 FCOS 结束后依次进行 | 持续跟进新论文，保留各方法自己的结构与训练语义 |
 | 数据、训练、评估 | 支持 YOLO TXT 数据、各版本训练/验证入口，已有曲线、数据分析、评估与预测可视化工具 | 扩充数据格式适配和跨版本可复现实验记录 |
 | 模型导出 | 目前以 PyTorch 为主 | 建立 ONNX 导出与 PyTorch 输出对比流程 |
 | 边缘部署 | TensorRT、RKNN 等板端链路尚未在本项目验证 | 按具体设备和工具链逐项接入，记录精度、延迟、吞吐和环境 |
@@ -57,6 +57,8 @@ X-DeT 从 YOLO 系列实现起步，方向扩展到更广泛的目标检测研�
 | **YOLOv1** | 网格预测、每格两个框、平方误差 | 原始风格模型；另有 TorchVision 骨干迁移变体 | [`configs/yolov1/`](configs/yolov1/) |
 | **YOLOv2** | Anchor boxes、Darknet-19、passthrough 特征 | 独立标签分配、损失、解码和 NMS | [`configs/yolov2/voc0712.yaml`](configs/yolov2/voc0712.yaml) |
 | **YOLOv3** | Darknet-53、残差块、三尺度预测、独立 sigmoid 分类 | 三尺度标签分配、Darknet 风格损失、解码和 NMS；可选 ConvNeXt-Small ImageNet 预训练骨干 | [`configs/yolov3/`](configs/yolov3/) |
+| **CenterNet** | 中心点 heatmap、宽高与局部 offset | ResNet-18 + CTResNetNeck，经典 Objects as Points 路径 | [`configs/centernet/`](configs/centernet/) |
+| **CornerNet** | 左上/右下角点配对、corner pooling、associative embedding | Hourglass-104 双 stack、Gaussian Soft-NMS | [`configs/cornernet/`](configs/cornernet/) |
 
 YOLOv2 可显式加载 Darknet-19 ImageNet 分类权重初始化 backbone，检测层仍从头训练；不会自动下载权重。完整范围和与论文的差异见 [YOLOv2 版本说明](docs/versions/yolov2.md)。
 
@@ -66,12 +68,14 @@ YOLOv3 默认路径可加载 Darknet-53 ImageNet 分类权重，保留论文骨�
 
 ## 正在扩展的检测器
 
-下列水平框模型已完成独立实现与 CPU 小样例验证，目前正在同一 VOC 划分上训练和评估。具体来源、模型结构、代码差异和运行方式见各版本说明。
+RTMDet-Tiny 和 FCOS 已完成独立实现；FCOS 正在同一 VOC 划分上训练。CenterNet 与 CornerNet 的独立实现、loss、decoder 和训练入口已加入，公开 COCO checkpoint 均已匹配并完成 CPU 单步 smoke；待 FCOS 结束后执行 GPU smoke 和顺序训练。具体来源、模型结构、代码差异和运行方式见各版本说明。
 
 | 方法 | 状态 | 实现重点 | 文档与配置 |
 |---|---|---|---|
-| **RTMDet-Tiny（水平框）** | 已实现；VOC 训练/测试进行中 | CSPNeXt + PAFPN、动态软标签分配、Quality Focal Loss 与 GIoU；从公开 COCO 检测权重映射 VOC 类别 | [版本说明](docs/versions/rtmdet.md) · [训练配置](configs/rtmdet/voc0712_tiny.yaml) |
-| **FCOS** | 已实现；VOC 训练/测试进行中 | ResNet-FPN P3–P7 逐点预测、LTRB 距离、centerness、Focal 与 IoU Loss | [版本说明](docs/versions/fcos.md) · [训练配置](configs/fcos/voc0712_resnet50.yaml) |
+| **RTMDet-Tiny（水平框）** | 已完成 VOC 训练与 test 评估 | CSPNeXt + PAFPN、动态软标签分配、Quality Focal Loss 与 GIoU；从公开 COCO 检测权重映射 VOC 类别 | [版本说明](docs/versions/rtmdet.md) · [训练配置](configs/rtmdet/voc0712_tiny.yaml) · [报告](docs/reports/rtmdet_voc0712_tiny_20261008.md) |
+| **FCOS** | VOC 训练进行中，待最终 test | ResNet-FPN P3–P7 逐点预测、LTRB 距离、centerness、Focal 与 IoU Loss | [版本说明](docs/versions/fcos.md) · [训练配置](configs/fcos/voc0712_resnet50.yaml) |
+| **CenterNet** | 已实现；COCO checkpoint 99.99996% 参数匹配，CPU 单步训练 smoke 通过；GPU smoke/训练待执行 | ResNet-18 + CTResNetNeck、中心 heatmap、宽高/offset 回归 | [版本说明](docs/versions/centernet.md) · [训练配置](configs/centernet/voc0712_resnet18.yaml) |
+| **CornerNet** | 已实现；COCO checkpoint 99.999997% 参数匹配，CPU 单步训练 smoke 通过；GPU smoke/训练待执行 | Hourglass-104、双角点 heatmap、corner pooling、embedding 配对 | [版本说明](docs/versions/cornernet.md) · [训练配置](configs/cornernet/voc0712_hourglass104.yaml) |
 | **RTMDet-R2（旋转框）** | 后续研究方向 | 在标准 RTMDet 完成后再考虑；这是面向遥感旋转框的扩展，包含角度回归与旋转 IoU，和本表中的水平框 RTMDet 任务不同 | [RTMDet-R2 参考仓库](https://github.com/Zeba-Xie/RTMDet-R2) |
 
 参考仓库固定在本地 `3dparty/` 中的提交及许可证、论文来源和实施边界记录在[检测器路线说明](docs/roadmap/detectors.md)。参考代码用于理解和对照；X-DeT 的实现会放在本仓库并自行验证，不把 MMDetection 当作默认运行依赖。
@@ -240,6 +244,8 @@ X-DeT/
 │   ├── models/yolov1/       # YOLOv1 专属模型、损失和后处理
 │   ├── models/yolov2/       # YOLOv2 专属模型、损失和后处理
 │   ├── models/yolov3/       # YOLOv3 专属模型、损失和后处理
+│   ├── models/centernet/    # CenterNet 专属模型、损失和后处理
+│   ├── models/cornernet/    # CornerNet 专属模型、损失和后处理
 │   ├── data/                # YOLO TXT 数据读取与增强
 │   ├── training/            # 训练循环和 checkpoint
 │   └── evaluation/          # 检测指标

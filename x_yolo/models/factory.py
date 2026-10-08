@@ -69,7 +69,19 @@ def build_model(model_config: dict[str, Any] | None, num_classes: int):
         from x_yolo.models.rtmdet.model import RTMDet
 
         return RTMDet(num_classes, channels=int(config.get("channels", 96)))
+    if architecture == "centernet":
+        from x_yolo.models.centernet.model import CenterNet
+
+        return CenterNet(
+            num_classes,
+            backbone_weights=config.get("backbone_weights"),
+        )
+    if architecture == "cornernet":
+        from x_yolo.models.cornernet.model import CornerNet
+
+        return CornerNet(num_classes)
     raise ValueError(
         f"Unknown model architecture {architecture!r}; available: "
-        "yolov1, yolov1_resnet50_transfer, yolov1_torchvision_convhead, yolov2, yolov3, fcos, rtmdet"
+        "yolov1, yolov1_resnet50_transfer, yolov1_torchvision_convhead, yolov2, yolov3, "
+        "fcos, rtmdet, centernet, cornernet"
     )

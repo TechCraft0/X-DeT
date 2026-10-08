@@ -1,0 +1,53 @@
+source:
+  paper: "Objects as Points (CenterNet, 2019)"
+  paper_url: https://arxiv.org/abs/1904.07850
+  reference_config: 3dparty/mmdetection/configs/centernet/centernet_r18_8xb16-crop512-140e_coco.py
+  pretrained_weights: "MMDetection CenterNet ResNet-18, COCO; URL in docs/versions/centernet.md"
+  adaptations:
+    - "Keeps the classic ResNet-18 + CTResNetNeck (DCNv2 disabled) + center/wh/offset head."
+    - "Uses the same VOC07+12 train/val set and square resize as the project's other runs."
+    - "Scales the reference SGD learning rate linearly from global batch 128 to batch 16."
+    - "Runs 140 passes over VOC; unlike the COCO config's RepeatDataset, one recipe epoch is one dataset pass."
+model:
+  architecture: centernet
+  backbone_weights: null
+dataset_config: configs/datasets/voc0712_trainmix.yaml
+input_size: 512
+epochs: 140
+micro_batch_size: 4
+effective_batch_size: 16
+validation_batch_size: 4
+precision: bf16
+num_workers: 4
+seed: 42
+freeze_backbone_epochs: 0
+checkpoint_interval_epochs: 10
+requires_pretrained_checkpoint: true
+optimizer:
+  name: SGD
+  learning_rate: 0.0025
+  momentum: 0.9
+  weight_decay: 0.0001
+  warmup_initial_learning_rate: 0.000025
+  warmup_epochs: 1
+  schedule: multistep
+  decay_epochs: [90, 120]
+  decay_factor: 0.1
+loss:
+  size_loss_weight: 0.1
+  offset_loss_weight: 1.0
+training_augmentation:
+  horizontal_flip: 0.5
+  scale_range: [0.8, 1.2]
+  translate: 0.1
+  saturation: 1.2
+  exposure: 1.2
+  hue: 0.05
+evaluation:
+  interval_epochs: 5
+  confidence_threshold: 0.001
+  nms_iou_threshold: 0.5
+  max_detections: 100
+decoder:
+  topk: 100
+  local_maximum_kernel: 3
