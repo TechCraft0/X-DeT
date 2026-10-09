@@ -78,4 +78,4 @@ python scripts/infer_dense_detector.py path/to/image.jpg \
 
 ## 当前验证状态
 
-CPU 小样例已检查 P3–P7 输出形状、正/空标注损失、反向梯度和空检测解码。完整 VOC 训练和 test 评估状态以后续实验报告为准。
+CPU 小样例已检查 P3–P7 输出形状、正/空标注损失、反向梯度和空检测解码。完整 VOC 训练已完成 120 epochs，VOC 2007 test 上最佳验证 checkpoint 达到 mAP@0.5 `0.7777`、mAP@0.5:0.95 `0.5001`；训练环境、验证曲线、数据分析、逐类结果和可视化见[完整实验报告](../reports/fcos_voc0712_resnet50_20261009.md)。本地权重及运行产物不随源码提交。
